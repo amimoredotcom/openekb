@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open Ekibastuz | Clean Start</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #ffffff;
+            --sidebar: #f5f5f7;
+            --text: #1d1d1f;
+            --text-muted: #86868b;
+            --accent: #0071e3;
+            --border: #d2d2d7;
+            --card: #ffffff;
+        }
+
+        [data-theme="dark"] {
+            --bg: #000000;
+            --sidebar: #1c1c1e;
+            --text: #f5f5f7;
+            --text-muted: #a1a1a6;
+            --accent: #0a84ff;
+            --border: #38383a;
+            --card: #2c2c2e;
+        }
+
+        body, html {
+            margin: 0; padding: 0;
+            font-family: 'Inter', sans-serif;
+            background: var(--bg); color: var(--text);
+            height: 100vh; overflow: hidden;
+            transition: 0.3s;
+        }
+
+        .layout { display: grid; grid-template-columns: 400px 1fr; height: 100vh; }
+        .sidebar { background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; z-index: 10; }
+        header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-weight: 800; font-size: 1.1rem; letter-spacing: -1px; text-transform: uppercase; }
+
+        .widgets { padding: 10px 20px; font-size: 11px; display: flex; gap: 15px; color: var(--accent); font-weight: 700; border-bottom: 1px solid var(--border); }
+        .content { padding: 25px; overflow-y: auto; flex: 1; }
+        
+        .input-box { margin-bottom: 15px; }
+        label { display: block; font-size: 10px; font-weight: 700; margin-bottom: 5px; color: var(--text-muted); text-transform: uppercase; }
+        
+        input, select, textarea {
+            width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+            background: var(--card); color: var(--text); font-family: inherit; font-size: 14px; box-sizing: border-box;
+        }
+
+        .btn {
+            width: 100%; padding: 14px; border-radius: 12px; border: none;
+            background: var(--text); color: var(--bg); font-weight: 700; cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn:hover { opacity: 0.8; }
+
+        .nav-btn { background: none; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 11px; font-weight: 700; }
+
+        .issue-card { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 15px; margin-bottom: 15px; cursor: pointer; transition: 0.2s; }
+        
+        .overlay { position: fixed; inset: 0; background: var(--bg); z-index: 2000; display: flex; align-items: center; justify-content: center; }
+        .modal { width: 320px; text-align: center; }
+        
+        .custom-m { width: 22px; height: 22px; border-radius: 50% 50% 50% 0; border: 2px solid #fff; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; color: white; font-size: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .solved-m { background: #ffffff !important; border: 2px solid #32d74b !important; color: #32d74b !important; transform: rotate(0deg) !important; border-radius: 50% !important; }
+        #map { height: 100%; width: 100%; }
+    </style>
+</head>
+<body onload="init()">
+
+<div class="overlay" id="authOverlay">
+    <div class="modal" id="loginForm">
+        <h2 class="logo" style="font-size: 1.5rem; margin-bottom: 25px;">OPEN EKIBASTUZ</h2>
+        <div class="input-box"><input type="text" id="logUser" placeholder="Логин"></div>
+        <div class="input-box"><input type="password" id="logPass" placeholder="Пароль"></div>
+        <button class="btn" onclick="handleLogin()">Войти</button>
+        <p style="font-size: 12px; margin-top: 15px; cursor: pointer; color: var(--accent)" id="t_noacc" onclick="toggleAuth(true)">Нет аккаунта? Регистрация</p>
+    </div>
+
+    <div class="modal" id="regForm" style="display:none;">
+        <h2 class="logo" id="t_reg_title">Регистрация</h2>
+        <div class="input-box"><input type="text" id="regUser" placeholder="Логин"></div>
+        <div class="input-box"><input type="password" id="regPass" placeholder="Пароль"></div>
+        <div class="input-box">
+            <select id="regRole">
+                <option value="user">Житель / Тұрғын</option>
+                <option value="admin">Акимат / Әкімдік</option>
+            </select>
+        </div>
+        <button class="btn" onclick="handleRegister()" id="t_create_btn">Создать аккаунт</button>
+        <p style="font-size: 12px; margin-top: 15px; cursor: pointer; color: var(--accent)" id="t_back" onclick="toggleAuth(false)">Назад</p>
+    </div>
+</div>
+
+<div class="overlay" id="profileOverlay" style="display:none; background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
+    <div class="modal" style="background: var(--bg); padding: 30px; border-radius: 20px;">
+        <h2 id="prof_name">User</h2>
+        <p id="prof_role_text">Роль</p>
+        <button class="btn" style="background: #ff453a; color: white;" onclick="location.reload()" id="t_logout">Выйти</button>
+        <button class="nav-btn" style="margin-top:10px; width:100%" id="t_close" onclick="document.getElementById('profileOverlay').style.display='none'">Закрыть</button>
+    </div>
+</div>
+
+<div class="layout">
+    <div class="sidebar">
+        <header>
+            <div class="logo">OPEN EKIBASTUZ</div>
+            <div style="display:flex; gap:5px;">
+                <button class="nav-btn" onclick="openProfile()">👤</button>
+                <button class="nav-btn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+                <button class="nav-btn" onclick="setLang('ru')">RU</button>
+                <button class="nav-btn" onclick="setLang('kz')">KZ</button>
+            </div>
+        </header>
+
+        <div class="widgets">
+            <span id="w_time">00:00:00</span>
+            <span id="w_temp">ЕКБ: --°C</span>
+        </div>
+
+        <div class="content">
+            <div id="panel_user">
+                <h3 id="t_new" style="margin-top:0">Новое обращение</h3>
+                <div class="input-box">
+                    <label id="t_cat">Категория</label>
+                    <select id="pType">
+                        <option value="Road">🚗 Дороги / Жолдар</option>
+                        <option value="Trash">♻️ Мусор / Қоқыс</option>
+                        <option value="Light">💡 Свет / Жарық</option>
+                    </select>
+                </div>
+                <div class="input-box">
+                    <label id="t_desc">Описание</label>
+                    <textarea id="pDesc" rows="3"></textarea>
+                </div>
+                <div class="input-box">
+                    <label id="t_file">Медиа</label>
+                    <input type="file" id="pFile" accept="image/*,video/*" onchange="processMedia(this)">
+                </div>
+                <p id="t_hint" style="font-size:11px; color:var(--accent); font-weight:700;">● Отметьте на карте</p>
+                <button class="btn" onclick="submitIssue()" id="t_send">Отправить</button>
+            </div>
+
+            <div id="panel_admin" style="display:none;">
+                <h3 id="t_admin_head">Әкімдік</h3>
+                <p id="t_admin_info">Қаланы басқару панелі.</p>
+            </div>
+
+            <hr style="border:0; border-top:1px solid var(--border); margin:25px 0">
+            <h3 id="t_feed">Лента заявок</h3>
+            <div id="feedList"></div>
+        </div>
+    </div>
+    <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // ВСЕ МЕТКИ УДАЛЕНЫ. ПРИ ЗАПУСКЕ ЭТОГО КОДА БАЗА БУДЕТ ЧИСТОЙ.
+    localStorage.clear(); 
+
+    let map, activeMarker, currentUser = null, currentMedia = null, selectedCoords = null;
+    let currLang = 'ru';
+
+    const lang = {
+        ru: { 
+            new:"Новое обращение", cat:"Категория", desc:"Описание", file:"Фото/Видео", hint:"● Отметьте на карте", 
+            hint_ok:"✓ Место выбрано", send:"Отправить сигнал", feed:"Лента заявок", author:"Автор", date:"Дата", 
+            status:"Статус", st_new:"В обработке", st_done:"Исправлено", reply_btn:"Ответить", 
+            road:"Дороги", trash:"Мусор", light:"Свет", prof_user:"Житель", prof_admin:"Акимат",
+            noacc: "Нет аккаунта? Регистрация", back: "Назад", reg_title: "Регистрация", create_btn: "Создать аккаунт",
+            logout: "Выйти", close: "Закрыть", admin_head: "Акимат", admin_info: "Панель управления городом"
+        },
+        kz: { 
+            new:"Жаңа өтініш", cat:"Санат", desc:"Сипаттама", file:"Фото/Видео", hint:"● Картада белгілеңіз", 
+            hint_ok:"✓ Орын таңдалды", send:"Сигнал жіберу", feed:"Өтініштер тізімі", author:"Автор", date:"Күні", 
+            status:"Күйі", st_new:"Өңделуде", st_done:"Орындалды", reply_btn:"Жауап беру", 
+            road:"Жолдар", trash:"Қоқыс", light:"Жарықтандыру", prof_user:"Тұрғын", prof_admin:"Әкімдік өкілі",
+            noacc: "Тіркелмегенсіз бе? Тіркелу", back: "Артқа", reg_title: "Тіркелу", create_btn: "Тіркелгіні ашу",
+            logout: "Шығу", close: "Жабу", admin_head: "Әкімдік", admin_info: "Қаланы басқару панелі"
+        }
+    };
+
+    function init() {
+        map = L.map('map', { zoomControl: false }).setView([51.7297, 75.3266], 13);
+        setMapStyle('light');
+        map.on('click', (e) => {
+            if(currentUser?.role === 'admin') return;
+            selectedCoords = e.latlng;
+            if(activeMarker) map.removeLayer(activeMarker);
+            activeMarker = L.marker(selectedCoords, { icon: L.divIcon({className:'custom-m', html:'<div style="background:#0071e3;width:10px;height:10px;border-radius:50%"></div>', iconSize:[14,14]}) }).addTo(map);
+            document.getElementById('t_hint').innerText = lang[currLang].hint_ok;
+        });
+        setInterval(() => document.getElementById('w_time').innerText = new Date().toLocaleTimeString(), 1000);
+        updateWeather();
+        renderFeed();
+    }
+
+    function updateWeather() {
+        fetch('https://api.open-meteo.com/v1/forecast?latitude=51.72&longitude=75.32&current=temperature_2m')
+            .then(r => r.json()).then(d => {
+                document.getElementById('w_temp').innerText = `ЕКБ: ${Math.round(d.current.temperature_2m)}°C`;
+            }).catch(() => { document.getElementById('w_temp').innerText = "ЕКБ: +12°C"; });
+    }
+
+    function setLang(l) {
+        currLang = l;
+        const keys = ['new','cat','desc','file','send','feed','admin_head','admin_info','noacc','back','reg_title','create_btn','logout','close'];
+        keys.forEach(k => { if(document.getElementById('t_'+k)) document.getElementById('t_'+k).innerText = lang[l][k] });
+        document.getElementById('t_hint').innerText = selectedCoords ? lang[l].hint_ok : lang[l].hint;
+        renderFeed();
+    }
+
+    function toggleAuth(isReg) {
+        document.getElementById('loginForm').style.display = isReg ? 'none' : 'block';
+        document.getElementById('regForm').style.display = isReg ? 'block' : 'none';
+    }
+
+    function handleRegister() {
+        const u = document.getElementById('regUser').value, p = document.getElementById('regPass').value, r = document.getElementById('regRole').value;
+        if(!u || !p) return;
+        let users = JSON.parse(localStorage.getItem('eki_users')) || [];
+        users.push({ u, p, role: r });
+        localStorage.setItem('eki_users', JSON.stringify(users));
+        toggleAuth(false);
+    }
+
+    function handleLogin() {
+        const u = document.getElementById('logUser').value, p = document.getElementById('logPass').value;
+        let users = JSON.parse(localStorage.getItem('eki_users')) || [];
+        let found = users.find(x => x.u === u && x.p === p);
+        if(found) {
+            currentUser = found;
+            document.getElementById('authOverlay').style.display = 'none';
+            document.getElementById('panel_user').style.display = found.role === 'admin' ? 'none' : 'block';
+            document.getElementById('panel_admin').style.display = found.role === 'admin' ? 'block' : 'none';
+            renderFeed();
+        }
+    }
+
+    function processMedia(inp) {
+        const reader = new FileReader();
+        reader.onload = (e) => currentMedia = e.target.result;
+        if(inp.files[0]) reader.readAsDataURL(inp.files[0]);
+    }
+
+    function submitIssue() {
+        const desc = document.getElementById('pDesc').value;
+        if(!selectedCoords || !desc) return;
+        let db = JSON.parse(localStorage.getItem('eki_db')) || [];
+        db.unshift({ id: Date.now(), type: document.getElementById('pType').value, desc, coords: selectedCoords, media: currentMedia, status: 'new', user: currentUser.u, date: new Date().toLocaleString(), reply: '' });
+        localStorage.setItem('eki_db', JSON.stringify(db));
+        document.getElementById('pDesc').value = ""; selectedCoords = null; if(activeMarker) map.removeLayer(activeMarker);
+        renderFeed();
+    }
+
+    function renderFeed() {
+        const list = document.getElementById('feedList');
+        const db = JSON.parse(localStorage.getItem('eki_db')) || [];
+        list.innerHTML = "";
+        map.eachLayer(l => { if(l instanceof L.Marker && l !== activeMarker) map.removeLayer(l) });
+
+        db.forEach(item => {
+            const isDone = item.status === 'done';
+            const color = item.type === 'Road' ? '#ff453a' : item.type === 'Trash' ? '#32d74b' : '#ffd60a';
+            const markerHtml = isDone ? `<div class="custom-m solved-m">✓</div>` : `<div class="custom-m" style="background:${color}"></div>`;
+            const marker = L.marker([item.coords.lat, item.coords.lng], {
+                icon: L.divIcon({ className: 'm-div', html: markerHtml, iconSize: [22, 22], iconAnchor: [11, 22] })
+            }).addTo(map);
+
+            const card = document.createElement('div');
+            card.className = 'issue-card';
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; font-size:10px; font-weight:800; color:${isDone ? '#32d74b' : color}">
+                    <span>${lang[currLang][item.type.toLowerCase()].toUpperCase()}</span>
+                    <span>${isDone ? lang[currLang].st_done.toUpperCase() : lang[currLang].st_new.toUpperCase()}</span>
+                </div>
+                <div style="font-size:13px; margin:8px 0">${item.desc}</div>
+                ${item.reply ? `<div style="margin-top:8px; padding:8px; background:rgba(0,113,227,0.1); border-radius:8px; font-size:11px"><b>${lang[currLang].prof_admin}:</b> ${item.reply}</div>` : ''}
+                ${currentUser?.role === 'admin' && !isDone ? `<button class="btn" style="margin-top:10px; padding:6px; font-size:11px" onclick="adminReply(${item.id})">${lang[currLang].reply_btn}</button>` : ''}
+            `;
+            card.onclick = () => { map.setView([item.coords.lat, item.coords.lng], 16); marker.openPopup(); };
+            list.appendChild(card);
+        });
+    }
+
+    function adminReply(id) {
+        const msg = prompt(currLang === 'ru' ? "Ваш ответ:" : "Жауабыңыз:");
+        if(msg) {
+            let db = JSON.parse(localStorage.getItem('eki_db'));
+            let it = db.find(x => x.id === id);
+            it.reply = msg; it.status = 'done';
+            localStorage.setItem('eki_db', JSON.stringify(db));
+            renderFeed();
+        }
+    }
+
+    function openProfile() {
+        document.getElementById('prof_name').innerText = currentUser.u;
+        document.getElementById('prof_role_text').innerText = currentUser.role === 'admin' ? lang[currLang].prof_admin : lang[currLang].prof_user;
+        document.getElementById('profileOverlay').style.display = 'flex';
+    }
+
+    function toggleTheme() {
+        const isD = document.body.getAttribute('data-theme') === 'dark';
+        document.body.setAttribute('data-theme', isD ? 'light' : 'dark');
+        setMapStyle(isD ? 'light' : 'dark');
+    }
+
+    function setMapStyle(s) {
+        map.eachLayer(l => { if(l._url) map.removeLayer(l) });
+        L.tileLayer(s === 'dark' ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    }
+</script>
+</body>
+</html>
